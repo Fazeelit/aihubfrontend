@@ -4,6 +4,10 @@
 import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  clearStoredAuthSession,
+  getStoredAuthToken,
+} from "@/authservice/AuthService";
 
 export default function Navbar({ openModal }) {
   const router = useRouter();
@@ -17,7 +21,7 @@ export default function Navbar({ openModal }) {
         return;
       }
 
-      setIsLoggedIn(Boolean(localStorage.getItem("authToken")));
+      setIsLoggedIn(Boolean(getStoredAuthToken()));
     };
 
     syncAuthState();
@@ -35,8 +39,7 @@ export default function Navbar({ openModal }) {
       return;
     }
 
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("authUser");
+    clearStoredAuthSession();
     window.dispatchEvent(new CustomEvent("auth-state-changed"));
   };
 
@@ -48,16 +51,11 @@ export default function Navbar({ openModal }) {
   };
 
   const handleMenuClick = (id) => {
-    setMobileMenuOpen(false);
-
-    const shouldLogoutToLanding =
-      isLoggedIn && (pathname === "/dashboard" || pathname === "/onboarding");
-
-    if (shouldLogoutToLanding) {
-      clearAuthState();
-      router.push(`/#${id}`);
+    if (isLoggedIn) {
       return;
     }
+
+    setMobileMenuOpen(false);
 
     if (pathname === "/") {
       scrollToSection(id);
@@ -97,7 +95,12 @@ export default function Navbar({ openModal }) {
           <li>
             <button
               onClick={() => handleMenuClick("features")}
-              className="text-[#64748B] text-sm hover:text-white transition"
+              disabled={isLoggedIn}
+              className={`text-sm transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed text-[#334155]"
+                  : "text-[#64748B] hover:text-white"
+              }`}
             >
               Features
             </button>
@@ -105,7 +108,12 @@ export default function Navbar({ openModal }) {
           <li>
             <button
               onClick={() => handleMenuClick("how")}
-              className="text-[#64748B] text-sm hover:text-white transition"
+              disabled={isLoggedIn}
+              className={`text-sm transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed text-[#334155]"
+                  : "text-[#64748B] hover:text-white"
+              }`}
             >
               How It Works
             </button>
@@ -113,7 +121,12 @@ export default function Navbar({ openModal }) {
           <li>
             <button
               onClick={() => handleMenuClick("results")}
-              className="text-[#64748B] text-sm hover:text-white transition"
+              disabled={isLoggedIn}
+              className={`text-sm transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed text-[#334155]"
+                  : "text-[#64748B] hover:text-white"
+              }`}
             >
               Results
             </button>
@@ -121,7 +134,12 @@ export default function Navbar({ openModal }) {
           <li>
             <button
               onClick={() => handleMenuClick("pricing")}
-              className="text-[#64748B] text-sm hover:text-white transition"
+              disabled={isLoggedIn}
+              className={`text-sm transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed text-[#334155]"
+                  : "text-[#64748B] hover:text-white"
+              }`}
             >
               Pricing
             </button>
@@ -131,7 +149,11 @@ export default function Navbar({ openModal }) {
         <div className="hidden sm:flex items-center gap-2 lg:gap-3">
           <button
             onClick={handleAuthClick}
-            className="px-4 lg:px-5 py-1.5 rounded-md border border-[#243050] bg-transparent text-[#E2E8F0] text-[13px] font-medium hover:border-[#F5A623] hover:text-[#F5A623] transition-all"
+            className={`px-4 lg:px-5 py-1.5 rounded-md text-[13px] transition-all ${
+              isLoggedIn
+                ? "bg-[#F5A623] text-[#060911] font-bold shadow-[0_0_20px_rgba(245,166,35,0.25)] hover:bg-[#E09018] hover:shadow-[0_0_30px_rgba(245,166,35,0.4)]"
+                : "border border-[#243050] bg-transparent text-[#E2E8F0] font-medium hover:border-[#F5A623] hover:text-[#F5A623]"
+            }`}
           >
             {isLoggedIn ? "Logout" : "Sign In"}
           </button>
@@ -180,25 +202,45 @@ export default function Navbar({ openModal }) {
           <div className="mx-auto flex max-w-[1440px] flex-col gap-2">
             <button
               onClick={() => handleMenuClick("features")}
-              className="rounded-lg border border-transparent bg-[#0C1220] px-4 py-3 text-left text-[13px] text-[#E2E8F0] transition hover:border-[#243050] hover:text-white"
+              disabled={isLoggedIn}
+              className={`rounded-lg border px-4 py-3 text-left text-[13px] transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed border-[#111927] bg-[#0C1220] text-[#334155]"
+                  : "border-transparent bg-[#0C1220] text-[#E2E8F0] hover:border-[#243050] hover:text-white"
+              }`}
             >
               Features
             </button>
             <button
               onClick={() => handleMenuClick("how")}
-              className="rounded-lg border border-transparent bg-[#0C1220] px-4 py-3 text-left text-[13px] text-[#E2E8F0] transition hover:border-[#243050] hover:text-white"
+              disabled={isLoggedIn}
+              className={`rounded-lg border px-4 py-3 text-left text-[13px] transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed border-[#111927] bg-[#0C1220] text-[#334155]"
+                  : "border-transparent bg-[#0C1220] text-[#E2E8F0] hover:border-[#243050] hover:text-white"
+              }`}
             >
               How It Works
             </button>
             <button
               onClick={() => handleMenuClick("results")}
-              className="rounded-lg border border-transparent bg-[#0C1220] px-4 py-3 text-left text-[13px] text-[#E2E8F0] transition hover:border-[#243050] hover:text-white"
+              disabled={isLoggedIn}
+              className={`rounded-lg border px-4 py-3 text-left text-[13px] transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed border-[#111927] bg-[#0C1220] text-[#334155]"
+                  : "border-transparent bg-[#0C1220] text-[#E2E8F0] hover:border-[#243050] hover:text-white"
+              }`}
             >
               Results
             </button>
             <button
               onClick={() => handleMenuClick("pricing")}
-              className="rounded-lg border border-transparent bg-[#0C1220] px-4 py-3 text-left text-[13px] text-[#E2E8F0] transition hover:border-[#243050] hover:text-white"
+              disabled={isLoggedIn}
+              className={`rounded-lg border px-4 py-3 text-left text-[13px] transition ${
+                isLoggedIn
+                  ? "cursor-not-allowed border-[#111927] bg-[#0C1220] text-[#334155]"
+                  : "border-transparent bg-[#0C1220] text-[#E2E8F0] hover:border-[#243050] hover:text-white"
+              }`}
             >
               Pricing
             </button>
@@ -206,7 +248,11 @@ export default function Navbar({ openModal }) {
             <div className="mt-2 grid grid-cols-1 gap-2">
               <button
                 onClick={handleAuthClick}
-                className="w-full rounded-lg border border-[#243050] px-4 py-3 text-[13px] font-medium text-[#E2E8F0] transition hover:border-[#F5A623] hover:text-[#F5A623]"
+                className={`w-full rounded-lg px-4 py-3 text-[13px] transition ${
+                  isLoggedIn
+                    ? "bg-[#F5A623] font-bold text-[#060911] hover:bg-[#E09018]"
+                    : "border border-[#243050] font-medium text-[#E2E8F0] hover:border-[#F5A623] hover:text-[#F5A623]"
+                }`}
               >
                 {isLoggedIn ? "Logout" : "Sign In"}
               </button>

@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const businessOptions = [
+import {
+  getMyOnboarding,
+  getOnboardingConfig,
+  getStoredAuthToken,
+  saveMyOnboarding,
+  saveMyUserDashboard,
+} from "@/authservice/AuthService";
+
+const defaultBusinessOptions = [
   {
     id: "driving-school",
     icon: "🚗",
@@ -48,7 +56,7 @@ const businessOptions = [
   },
 ];
 
-const integrationsSeed = [
+const defaultIntegrations = [
   {
     id: "phone",
     icon: "📞",
@@ -91,20 +99,66 @@ const integrationsSeed = [
   },
 ];
 
-const voiceSettingsSeed = [
-  { id: "style", label: "Voice Style", value: "Friendly and Professional" },
-  { id: "language", label: "Language", value: "English (US)" },
-  { id: "hours", label: "Hours", value: "24/7 Always On" },
-  { id: "greeting", label: "Greeting", value: "Custom Business Intro" },
+const defaultVoiceSettings = [
+  { id: "style", label: "Voice Style", value: "Friendly and Professional", selected: true },
+  { id: "language", label: "Language", value: "English (US)", selected: false },
+  { id: "hours", label: "Hours", value: "24/7 Always On", selected: false },
+  { id: "greeting", label: "Greeting", value: "Custom Business Intro", selected: false },
 ];
 
-const progressSteps = [
+const defaultProgressSteps = [
   { step: 1, label: "Account Created" },
   { step: 2, label: "Business Type" },
   { step: 3, label: "Integrations" },
   { step: 4, label: "Configure Nova" },
   { step: 5, label: "Go Live" },
 ];
+
+const defaultLiveCards = [
+  {
+    id: "nova-active",
+    icon: "🤖",
+    title: "Nova Active",
+    description: "AI receptionist is live",
+    tone: "success",
+  },
+  {
+    id: "workflows-on",
+    icon: "⚡",
+    title: "4 Workflows On",
+    description: "Automations running",
+    tone: "warning",
+  },
+  {
+    id: "dashboard-ready",
+    icon: "📊",
+    title: "Dashboard Ready",
+    description: "Live metrics tracking",
+    tone: "info",
+  },
+];
+
+const defaultCopy = {
+  businessTitle: "What type of business do you run?",
+  businessSubtitle:
+    "We'll pre-load the perfect tools, workflows, and AI prompts for your industry.",
+  integrationsTitle: "Connect your existing tools",
+  integrationsSubtitle: "Link the tools you already use. You can always add more later.",
+  novaTitle: "Meet Nova - your AI receptionist",
+  novaSubtitle: "Customize how Nova sounds and what she knows about your business.",
+  novaReadyTitle: "Nova is ready",
+  novaReadySubtitle: "Powered by ElevenLabs voice AI - Pre-trained on your business type",
+  liveTitle: "You're live!",
+  liveSubtitle:
+    "Nova is answering your calls. Automations are running. Your dashboard is live. Welcome to Smart AI Hub.",
+};
+
+const defaultOnboardingDefaults = {
+  currentStep: 2,
+  selectedBusinessId: defaultBusinessOptions[0].id,
+  businessName: "Nest Driving School",
+  greeting: "Thanks for calling Nest Driving School. How can I help you today?",
+};
 
 const themeVars = {
   "--flow-bg": "#060911",
@@ -135,36 +189,339 @@ const cardNameClass =
   "mb-1 font-['Syne',sans-serif] text-[14px] font-bold text-[var(--flow-white)]";
 
 const cardDescClass = "text-[11px] leading-[1.4] text-[var(--flow-muted)]";
+const onboardingProfileStorageKey = "dashboardOnboardingProfile";
+const defaultBusinessNamePrefix = "Nest";
 
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
+function mergeById(baseItems, savedItems, mergeFields) {
+  const savedById = new Map((savedItems ?? []).map((item) => [item.id, item]));
+
+  return baseItems.map((item) => {
+    const savedItem = savedById.get(item.id);
+
+    if (!savedItem) {
+      return item;
+    }
+
+    return {
+      ...item,
+      ...Object.fromEntries(mergeFields.map((field) => [field, savedItem[field]])),
+    };
+  });
+}
+
+function persistOnboardingProfileSnapshot(profile) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(onboardingProfileStorageKey, JSON.stringify(profile));
+}
+
+function getBusinessTypeLabel(business) {
+  return business?.name ?? defaultBusinessOptions[0].name;
+}
+
+function getBusinessNameValue(business, currentName) {
+  const trimmedName = typeof currentName === "string" ? currentName.trim() : "";
+  const fallbackBusiness = business ?? defaultBusinessOptions[0];
+  const defaultDrivingName = `${defaultBusinessNamePrefix} ${defaultBusinessOptions[0].name}`;
+
+  if (!trimmedName || trimmedName === defaultDrivingName) {
+    return `${defaultBusinessNamePrefix} ${fallbackBusiness.name}`;
+  }
+
+  return trimmedName;
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(2);
-  const [selectedBusinessId, setSelectedBusinessId] = useState(businessOptions[0].id);
-  const [integrations, setIntegrations] = useState(integrationsSeed);
-  const [voiceSelections, setVoiceSelections] = useState(
-    voiceSettingsSeed.reduce(
-      (acc, item, index) => ({ ...acc, [item.id]: index === 0 }),
-      {},
-    ),
+  const [copy, setCopy] = useState(defaultCopy);
+  const [progressSteps, setProgressSteps] = useState(defaultProgressSteps);
+  const [businessOptions, setBusinessOptions] = useState(defaultBusinessOptions);
+  const [integrations, setIntegrations] = useState(defaultIntegrations);
+  const [voiceSettings, setVoiceSettings] = useState(defaultVoiceSettings);
+  const [liveCards, setLiveCards] = useState(defaultLiveCards);
+  const [currentStep, setCurrentStep] = useState(defaultOnboardingDefaults.currentStep);
+  const [selectedBusinessId, setSelectedBusinessId] = useState(
+    defaultOnboardingDefaults.selectedBusinessId,
   );
   const [integrationTouched, setIntegrationTouched] = useState({});
-  const [businessName, setBusinessName] = useState("Nest Driving School");
-  const [greeting, setGreeting] = useState(
-    "Thanks for calling Nest Driving School. How can I help you today?",
-  );
+  const [businessName, setBusinessName] = useState(defaultOnboardingDefaults.businessName);
+  const [greeting, setGreeting] = useState(defaultOnboardingDefaults.greeting);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [shouldOpenFullFlow, setShouldOpenFullFlow] = useState(false);
+
+  const skipNextAutosaveRef = useRef(true);
+  const autosaveTimeoutRef = useRef(null);
+  const loadRequestRef = useRef(0);
 
   const selectedBusiness = useMemo(
     () =>
       businessOptions.find((item) => item.id === selectedBusinessId) ?? businessOptions[0],
-    [selectedBusinessId],
+    [businessOptions, selectedBusinessId],
   );
 
-  const goNext = () => setCurrentStep((step) => Math.min(step + 1, 5));
-  const goBack = () => setCurrentStep((step) => Math.max(step - 1, 2));
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    setShouldOpenFullFlow(params.get("view") === "full");
+  }, []);
+
+  useEffect(() => {
+    persistOnboardingProfileSnapshot({
+      businessName: getBusinessNameValue(selectedBusiness, businessName),
+      businessType: getBusinessTypeLabel(selectedBusiness),
+    });
+  }, [businessName, selectedBusiness]);
+
+  useEffect(() => {
+    router.prefetch("/dashboard");
+  }, [router]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+
+    async function loadOnboarding() {
+      try {
+        const configResponse = await getOnboardingConfig();
+        const configData = configResponse?.data ?? {};
+        const configDefaults = configData.defaults ?? defaultOnboardingDefaults;
+        const configBusinessOptions = configData.businessOptions ?? defaultBusinessOptions;
+        const configIntegrations = configData.integrationsSeed ?? defaultIntegrations;
+        const configVoiceSettings = configData.voiceSettingsSeed ?? defaultVoiceSettings;
+
+        if (!isMounted || loadRequestRef.current !== requestId) {
+          return;
+        }
+
+        setCopy(configData.copy ?? defaultCopy);
+        setProgressSteps(configData.progressSteps ?? defaultProgressSteps);
+        setBusinessOptions(configBusinessOptions);
+        setIntegrations(configIntegrations);
+        setVoiceSettings(
+          (configVoiceSettings ?? []).map((item, index) => ({
+            ...item,
+            selected: item.selected ?? index === 0,
+          })),
+        );
+        setLiveCards(configData.liveCards ?? defaultLiveCards);
+        setCurrentStep(configDefaults.currentStep ?? defaultOnboardingDefaults.currentStep);
+        setSelectedBusinessId(
+          configDefaults.selectedBusinessId ?? defaultOnboardingDefaults.selectedBusinessId,
+        );
+        setBusinessName(configDefaults.businessName ?? defaultOnboardingDefaults.businessName);
+        setGreeting(configDefaults.greeting ?? defaultOnboardingDefaults.greeting);
+
+        if (!getStoredAuthToken()) {
+          return;
+        }
+
+        try {
+          const onboardingResponse = await getMyOnboarding({ silent: true });
+          const savedData = onboardingResponse?.data;
+
+          if (!savedData || !isMounted || loadRequestRef.current !== requestId) {
+            return;
+          }
+
+          const matchedBusiness =
+            configBusinessOptions.find(
+              (item) => item.name === savedData.selectedBusiness?.name,
+            ) ?? configBusinessOptions[0];
+
+          setCurrentStep(
+            shouldOpenFullFlow
+              ? 2
+              : savedData.currentStep ?? configDefaults.currentStep ?? 2,
+          );
+          setSelectedBusinessId(
+            matchedBusiness?.id ??
+              configDefaults.selectedBusinessId ??
+              defaultOnboardingDefaults.selectedBusinessId,
+          );
+          setIntegrations(
+            mergeById(configIntegrations, savedData.integrations, ["connected"]),
+          );
+          setVoiceSettings(
+            mergeById(
+              (configVoiceSettings ?? []).map((item, index) => ({
+                ...item,
+                selected: item.selected ?? index === 0,
+              })),
+              savedData.voiceSettings,
+              ["selected"],
+            ),
+          );
+          setBusinessName(savedData.businessName ?? configDefaults.businessName ?? "");
+          setGreeting(savedData.greeting ?? configDefaults.greeting ?? "");
+        } catch {
+          return;
+        }
+      } catch {
+        if (!isMounted || loadRequestRef.current !== requestId) {
+          return;
+        }
+
+        setCopy(defaultCopy);
+        setProgressSteps(defaultProgressSteps);
+        setBusinessOptions(defaultBusinessOptions);
+        setIntegrations(defaultIntegrations);
+        setVoiceSettings(defaultVoiceSettings);
+        setLiveCards(defaultLiveCards);
+        setCurrentStep(defaultOnboardingDefaults.currentStep);
+        setSelectedBusinessId(defaultOnboardingDefaults.selectedBusinessId);
+        setBusinessName(defaultOnboardingDefaults.businessName);
+        setGreeting(defaultOnboardingDefaults.greeting);
+      } finally {
+        if (isMounted && loadRequestRef.current === requestId) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadOnboarding();
+
+    return () => {
+      isMounted = false;
+
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+    }, [shouldOpenFullFlow]);
+
+  const persistOnboarding = async ({
+    overrideStep,
+    silent = false,
+  } = {}) => {
+    if (!getStoredAuthToken()) {
+      return true;
+    }
+
+    const stepToSave = overrideStep ?? currentStep;
+    const payload = {
+      currentStep: stepToSave,
+      selectedBusinessId,
+      integrations: integrations.map(({ id, connected }) => ({ id, connected })),
+      voiceSettings: voiceSettings.map(({ id, label, value, selected }) => ({
+        id,
+        label,
+        value,
+        selected,
+      })),
+      businessName,
+      greeting,
+      onboardingStatus: stepToSave >= 5 ? "completed" : "in_progress",
+    };
+
+    if (!silent) {
+      setIsSubmitting(true);
+    }
+
+    try {
+      await saveMyOnboarding(payload, { silent });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (!silent) {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const persistDashboardSeed = async ({ silent = false } = {}) => {
+    if (!getStoredAuthToken()) {
+      return true;
+    }
+
+    try {
+      await saveMyUserDashboard(
+        {
+          activePanel: "overview",
+          activeDocument: "policy",
+          activeSettingsTabId: "profile",
+          selectedPlanId: "pro",
+          billingCycle: "monthly",
+          businessProfile: {
+            businessName: getBusinessNameValue(selectedBusiness, businessName),
+            businessType: getBusinessTypeLabel(selectedBusiness),
+            website: "nestdrivingschool.com",
+          },
+          settingsToggles: {
+            claude: true,
+            streaming: true,
+            history: true,
+          },
+        },
+        { silent },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (isLoading || !getStoredAuthToken()) {
+      return;
+    }
+
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = setTimeout(() => {
+      persistOnboarding({ silent: true });
+    }, 700);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [
+    businessName,
+    currentStep,
+    greeting,
+    integrations,
+    isLoading,
+    selectedBusinessId,
+    voiceSettings,
+  ]);
+
+  const handleStepChange = async (nextStep, options = {}) => {
+    const requireSave = options.requireSave ?? false;
+
+    if (options.persist !== false) {
+      const didSave = await persistOnboarding({
+        overrideStep: nextStep,
+        silent: options.silent ?? true,
+      });
+
+      if (!didSave && requireSave) {
+        return false;
+      }
+    }
+
+    setCurrentStep(nextStep);
+    return true;
+  };
 
   const toggleIntegration = (integrationId) => {
     setIntegrationTouched((current) => ({
@@ -180,11 +537,79 @@ export default function OnboardingPage() {
   };
 
   const toggleVoiceSetting = (settingId) => {
-    setVoiceSelections((current) => ({
-      ...current,
-      [settingId]: !current[settingId],
-    }));
+    setVoiceSettings((current) =>
+      current.map((item) =>
+        item.id === settingId ? { ...item, selected: !item.selected } : item,
+      ),
+    );
   };
+
+  const goNext = async () => {
+    const nextStep = Math.min(currentStep + 1, 5);
+    await handleStepChange(nextStep, {
+      silent: nextStep !== 5,
+      requireSave: nextStep === 5,
+    });
+  };
+
+  const goBack = async () => {
+    const nextStep = Math.max(currentStep - 1, 2);
+    await handleStepChange(nextStep, { silent: true });
+  };
+
+  const handleSaveAndOpenDashboard = async () => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    setIsSubmitting(true);
+
+    void Promise.allSettled([
+      persistOnboarding({
+        overrideStep: currentStep,
+        silent: true,
+      }),
+      persistDashboardSeed({ silent: true }),
+    ]);
+
+    startTransition(() => {
+      router.push("/dashboard");
+    });
+  };
+
+  const getLiveCardToneClasses = (tone) => {
+    if (tone === "success") {
+      return {
+        border: "border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.08)]",
+        title: "text-[var(--flow-green)]",
+      };
+    }
+
+    if (tone === "info") {
+      return {
+        border: "border-[rgba(34,211,238,0.2)] bg-[rgba(34,211,238,0.08)]",
+        title: "text-[var(--flow-cyan)]",
+      };
+    }
+
+    return {
+      border: "border-[rgba(245,166,35,0.2)] bg-[rgba(245,166,35,0.08)]",
+      title: "text-[var(--flow-amber)]",
+    };
+  };
+
+  if (isLoading) {
+    return (
+      <main
+        className="min-h-screen bg-[linear-gradient(180deg,#060911_0%,#0a1120_100%)] text-[var(--flow-text)]"
+        style={themeVars}
+      >
+        <div className="mx-auto flex min-h-screen w-[min(1280px,calc(100%-32px))] items-center justify-center text-[14px] text-[var(--flow-muted)]">
+          Loading onboarding...
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -193,15 +618,6 @@ export default function OnboardingPage() {
     >
       <div className="mx-auto w-[min(1280px,calc(100%-32px))] px-0 pb-14 pt-[clamp(48px,6vw,72px)] min-[1440px]:w-[min(1360px,calc(100%-64px))] max-[1080px]:w-[min(100%-32px,1000px)] max-[1080px]:pt-[56px] max-[720px]:w-[min(100%-20px,100%)] max-[720px]:pb-7 max-[720px]:pt-12">
         <div className="mb-5 flex items-center justify-end gap-4 max-[720px]:flex-col max-[720px]:items-start">
-          <div className="flex items-center gap-[10px]">
-            <button
-              type="button"
-              className="cursor-pointer rounded-[10px] border border-[var(--flow-amber)] bg-[var(--flow-amber)] px-[14px] py-2 font-['Syne',sans-serif] text-[12px] font-bold text-[#060911] transition-[background,border-color,transform] duration-200 hover:-translate-y-px hover:border-[var(--flow-amber-2)] hover:bg-[var(--flow-amber-2)]"
-              onClick={() => router.push("/dashboard")}
-            >
-              Skip to Dashboard
-            </button>
-          </div>
         </div>
 
         <div className="mb-5 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[720px]:mb-4 max-[720px]:gap-[6px]">
@@ -247,11 +663,10 @@ export default function OnboardingPage() {
         {currentStep === 2 && (
           <section className="rounded-[16px] border border-[var(--flow-border-2)] bg-[var(--flow-bg-2)] p-10 max-[720px]:p-5">
             <h1 className="mb-[6px] font-['Syne',sans-serif] text-[26px] font-extrabold tracking-[-0.8px] text-[var(--flow-white)]">
-              What type of business do you run?
+              {copy.businessTitle}
             </h1>
             <p className="mb-7 max-w-[720px] text-[14px] text-[var(--flow-muted)]">
-              We&apos;ll pre-load the perfect tools, workflows, and AI prompts for your
-              industry.
+              {copy.businessSubtitle}
             </p>
 
             <div className="grid grid-cols-3 gap-[10px] max-[1080px]:grid-cols-2 max-[720px]:grid-cols-1">
@@ -278,9 +693,7 @@ export default function OnboardingPage() {
                       ✓
                     </div>
                     <div className="mb-[10px] text-[28px]">{business.icon}</div>
-                    <div className={cardNameClass}>
-                      {business.name}
-                    </div>
+                    <div className={cardNameClass}>{business.name}</div>
                     <div className={cardDescClass}>{business.desc}</div>
                   </button>
                 );
@@ -318,10 +731,10 @@ export default function OnboardingPage() {
         {currentStep === 3 && (
           <section className="rounded-[16px] border border-[var(--flow-border-2)] bg-[var(--flow-bg-2)] p-10 max-[720px]:p-5">
             <h1 className="mb-[6px] font-['Syne',sans-serif] text-[26px] font-extrabold tracking-[-0.8px] text-[var(--flow-white)]">
-              Connect your existing tools
+              {copy.integrationsTitle}
             </h1>
             <p className="mb-7 max-w-[720px] text-[14px] text-[var(--flow-muted)]">
-              Link the tools you already use. You can always add more later.
+              {copy.integrationsSubtitle}
             </p>
 
             <div className="flex flex-col gap-2">
@@ -380,10 +793,10 @@ export default function OnboardingPage() {
         {currentStep === 4 && (
           <section className="rounded-[16px] border border-[var(--flow-border-2)] bg-[var(--flow-bg-2)] p-10 max-[720px]:p-5">
             <h1 className="mb-[6px] font-['Syne',sans-serif] text-[26px] font-extrabold tracking-[-0.8px] text-[var(--flow-white)]">
-              Meet Nova — your AI receptionist
+              {copy.novaTitle}
             </h1>
             <p className="mb-7 max-w-[720px] text-[14px] text-[var(--flow-muted)]">
-              Customize how Nova sounds and what she knows about your business.
+              {copy.novaSubtitle}
             </p>
 
             <div className="mb-4 rounded-[10px] border border-[var(--flow-border)] bg-[var(--flow-bg)] p-5">
@@ -397,20 +810,20 @@ export default function OnboardingPage() {
                 ))}
               </div>
               <div className="mb-1 font-['Syne',sans-serif] text-[18px] font-bold text-[var(--flow-amber)]">
-                Nova is ready
+                {copy.novaReadyTitle}
               </div>
               <div className="text-[12px] text-[var(--flow-muted)]">
-                Powered by ElevenLabs voice AI · Pre-trained on your business type
+                {copy.novaReadySubtitle}
               </div>
 
               <div className="mt-[14px] grid grid-cols-2 gap-[10px] max-[720px]:grid-cols-1">
-                {voiceSettingsSeed.map((item) => (
+                {voiceSettings.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     className={cn(
                       "cursor-pointer rounded-[7px] border border-[var(--flow-border)] bg-[var(--flow-bg-2)] p-3 text-left transition-[border-color,background,color] duration-200",
-                      voiceSelections[item.id] && "border-[var(--flow-amber)]",
+                      item.selected && "border-[var(--flow-amber)]",
                     )}
                     onClick={() => toggleVoiceSetting(item.id)}
                   >
@@ -451,8 +864,21 @@ export default function OnboardingPage() {
               <button type="button" className={ghostButtonClass} onClick={goBack}>
                 ← Back
               </button>
-              <button type="button" className={primaryButtonClass} onClick={goNext}>
-                Go Live
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={isSubmitting}
+                onClick={handleSaveAndOpenDashboard}
+              >
+                {isSubmitting ? "Saving..." : "Open My Dashboard"}
+              </button>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={isSubmitting}
+                onClick={goNext}
+              >
+                {isSubmitting ? "Saving..." : "Go Live"}
               </button>
             </div>
           </section>
@@ -462,48 +888,42 @@ export default function OnboardingPage() {
           <section className="rounded-[16px] border border-[var(--flow-border-2)] bg-[var(--flow-bg-2)] px-10 py-[60px] text-center max-[720px]:px-5 max-[720px]:py-9">
             <div className="mb-5 text-[56px]">🚀</div>
             <h1 className="mb-[6px] text-center font-['Syne',sans-serif] text-[26px] font-extrabold tracking-[-0.8px] text-[var(--flow-white)]">
-              You&apos;re live!
+              {copy.liveTitle}
             </h1>
             <p className="mx-auto mb-8 max-w-[400px] text-[14px] font-light text-[var(--flow-muted)]">
-              Nova is answering your calls. Automations are running. Your dashboard is live. Welcome to Smart AI Hub.
+              {copy.liveSubtitle}
             </p>
 
             <div className="mb-8 grid grid-cols-3 gap-3 text-left max-[1080px]:grid-cols-1">
-              <div className="rounded-[8px] border border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.08)] p-[14px]">
-                <div className="mb-[6px] text-[20px]">🤖</div>
-                <div className="mb-[3px] text-[12px] font-semibold text-[var(--flow-green)]">
-                  Nova Active
-                </div>
-                <div className="text-[11px] text-[var(--flow-muted)]">
-                  AI receptionist is live
-                </div>
-              </div>
-              <div className="rounded-[8px] border border-[rgba(245,166,35,0.2)] bg-[rgba(245,166,35,0.08)] p-[14px]">
-                <div className="mb-[6px] text-[20px]">⚡</div>
-                <div className="mb-[3px] text-[12px] font-semibold text-[var(--flow-amber)]">
-                  4 Workflows On
-                </div>
-                <div className="text-[11px] text-[var(--flow-muted)]">
-                  Automations running
-                </div>
-              </div>
-              <div className="rounded-[8px] border border-[rgba(34,211,238,0.2)] bg-[rgba(34,211,238,0.08)] p-[14px]">
-                <div className="mb-[6px] text-[20px]">📊</div>
-                <div className="mb-[3px] text-[12px] font-semibold text-[var(--flow-cyan)]">
-                  Dashboard Ready
-                </div>
-                <div className="text-[11px] text-[var(--flow-muted)]">
-                  Live metrics tracking
-                </div>
-              </div>
+              {liveCards.map((card) => {
+                const toneClasses = getLiveCardToneClasses(card.tone);
+
+                return (
+                  <div key={card.id} className={cn("rounded-[8px] p-[14px]", toneClasses.border)}>
+                    <div className="mb-[6px] text-[20px]">{card.icon}</div>
+                    <div
+                      className={cn(
+                        "mb-[3px] text-[12px] font-semibold",
+                        toneClasses.title,
+                      )}
+                    >
+                      {card.title}
+                    </div>
+                    <div className="text-[11px] text-[var(--flow-muted)]">
+                      {card.description}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <button
               type="button"
               className="cursor-pointer rounded-[7px] border-none bg-[var(--flow-amber)] px-8 py-3 font-['Syne',sans-serif] text-[14px] font-bold text-[#060911] transition-all duration-200 hover:bg-[var(--flow-amber-2)]"
-              onClick={() => router.push("/dashboard")}
+              disabled={isSubmitting}
+              onClick={handleSaveAndOpenDashboard}
             >
-              Open My Dashboard →
+              {isSubmitting ? "Saving..." : "Open My Dashboard"}
             </button>
           </section>
         )}

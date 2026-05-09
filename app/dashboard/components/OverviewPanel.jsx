@@ -29,7 +29,7 @@ export default function OverviewPanel() {
             ● Nova Live
           </span>
           <Link
-            href="/onboarding"
+            href="/onboarding?view=full"
             className="inline-flex items-center justify-center rounded-[6px] bg-[var(--amber)] px-[14px] py-[6px] text-[12px] font-semibold text-[var(--bg)] transition-colors duration-200 hover:bg-[var(--amber2)] max-[720px]:w-full"
           >
             Back to Onboarding

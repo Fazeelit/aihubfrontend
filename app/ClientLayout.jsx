@@ -23,10 +23,26 @@ export default function ClientLayout({ children }) {
       openModal(requestedTab === "signup" ? "signup" : "login");
     };
 
+    const handleUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      const isEventReason =
+        (typeof Event !== "undefined" && reason instanceof Event) ||
+        String(reason) === "[object Event]";
+
+      if (!isEventReason) {
+        return;
+      }
+
+      event.preventDefault();
+      console.error("Suppressed event-shaped rejection:", reason);
+    };
+
     window.addEventListener("open-auth-modal", handleOpenAuthModal);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
 
     return () => {
       window.removeEventListener("open-auth-modal", handleOpenAuthModal);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
 

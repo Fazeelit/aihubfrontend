@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loginUser, signupUser } from "../../authservice/AuthService";
+import {
+  loginUser,
+  setStoredAuthSession,
+  signupUser,
+} from "../../authservice/AuthService";
 
 const initialFormState = {
   username: "",
@@ -104,13 +108,10 @@ export default function AuthModal({
       const user = response?.data?.user;
 
       if (activeTab === "login") {
-        if (typeof window !== "undefined" && authToken) {
-          localStorage.setItem("authToken", authToken);
-        }
-
-        if (typeof window !== "undefined" && user) {
-          localStorage.setItem("authUser", JSON.stringify(user));
-        }
+        setStoredAuthSession({
+          token: authToken,
+          user,
+        });
 
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("auth-state-changed"));

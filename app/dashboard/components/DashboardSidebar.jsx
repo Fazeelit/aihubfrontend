@@ -9,8 +9,11 @@ import { cn } from "@/dashboard/components/dashboardUtils";
 export default function DashboardSidebar({
   activePanel,
   avatarLabel,
+  accountItems = accountNav,
+  businessItems = businessNav,
   currentPlanPrice,
   currentPlanName,
+  dashboardItems = dashboardNav,
   displayName,
   onPanelChange,
 }) {
@@ -19,18 +22,22 @@ export default function DashboardSidebar({
       <div className="flex-1 overflow-y-auto py-3 max-[1080px]:grid max-[1080px]:grid-cols-2 max-[1080px]:gap-1 max-[1080px]:p-3 max-[720px]:grid-cols-1">
         <NavSection
           activePanel={activePanel}
-          items={dashboardNav}
+          items={dashboardItems}
           label="Main"
           onPanelChange={onPanelChange}
         />
 
         <StaticSection
           activePanel={activePanel}
-          items={businessNav}
+          items={businessItems}
           label="Business"
           onPanelChange={onPanelChange}
         />
-        <AccountSection activePanel={activePanel} items={accountNav} onPanelChange={onPanelChange} />
+        <AccountSection
+          activePanel={activePanel}
+          items={accountItems}
+          onPanelChange={onPanelChange}
+        />
       </div>
 
       <div className="border-t border-[var(--border)] p-[14px] max-[1080px]:p-3">
@@ -137,7 +144,7 @@ function AccountSection({ activePanel, items, onPanelChange }) {
       </div>
 
       {items.map((item) => {
-        const isActive = item.id === "settings" && activePanel === "settings";
+        const isActive = item.id === activePanel;
 
         return (
           <div
@@ -148,7 +155,7 @@ function AccountSection({ activePanel, items, onPanelChange }) {
                 ? "bg-[rgba(245,166,35,0.07)] text-[var(--amber)]"
                 : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.03)] hover:text-[var(--text)]",
             )}
-            onClick={item.id === "settings" ? () => onPanelChange("settings") : undefined}
+            onClick={() => onPanelChange(item.id)}
           >
             {isActive ? (
               <span className="absolute bottom-[6px] left-0 top-[6px] hidden w-[2px] rounded-r-[2px] bg-[var(--amber)] max-[1080px]:hidden lg:block" />

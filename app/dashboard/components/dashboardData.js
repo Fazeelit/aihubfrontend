@@ -14,7 +14,7 @@ export const businessNav = [
 
 export const accountNav = [
   { id: "settings", icon: "⚙️", label: "Settings" },
-  { id: "billing-link", icon: "💳", label: "Billing" },
+  { id: "billing", icon: "💳", label: "Billing" },
 ];
 
 export const kpis = [
@@ -249,7 +249,6 @@ export const settingsTabs = [
   "🔔 Notifications",
   "🔌 Integrations",
   "🤖 AI Model",
-  "💳 Billing",
   "👥 Team",
 ];
 
