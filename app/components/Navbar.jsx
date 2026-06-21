@@ -7,12 +7,14 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   clearStoredAuthSession,
   getStoredAuthToken,
+  getStoredAuthUser,
 } from "@/authservice/AuthService";
 
 export default function Navbar({ openModal }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -21,7 +23,20 @@ export default function Navbar({ openModal }) {
         return;
       }
 
+      const storedUser = getStoredAuthUser();
+      let resolvedRole = "";
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          resolvedRole = String(parsedUser?.role || "").trim().toUpperCase();
+        } catch {
+          resolvedRole = "";
+        }
+      }
+
       setIsLoggedIn(Boolean(getStoredAuthToken()));
+      setIsAdmin(resolvedRole === "ADMIN");
     };
 
     syncAuthState();
@@ -75,6 +90,11 @@ export default function Navbar({ openModal }) {
 
     clearAuthState();
     router.push("/");
+  };
+
+  const handleAdminDashboardClick = () => {
+    setMobileMenuOpen(false);
+    router.push("/AdminDashboard");
   };
 
   return (
@@ -157,6 +177,14 @@ export default function Navbar({ openModal }) {
           >
             {isLoggedIn ? "Logout" : "Sign In"}
           </button>
+          {isLoggedIn && isAdmin ? (
+            <button
+              onClick={handleAdminDashboardClick}
+              className="px-4 lg:px-5 py-1.5 rounded-md bg-[#F5A623] text-[#060911] text-[13px] font-bold shadow-[0_0_20px_rgba(245,166,35,0.25)] transition-all hover:bg-[#E09018] hover:shadow-[0_0_30px_rgba(245,166,35,0.4)]"
+            >
+              Admin Dashboard
+            </button>
+          ) : null}
           {!isLoggedIn ? (
             <button
               onClick={() => {
@@ -256,6 +284,14 @@ export default function Navbar({ openModal }) {
               >
                 {isLoggedIn ? "Logout" : "Sign In"}
               </button>
+              {isLoggedIn && isAdmin ? (
+                <button
+                  onClick={handleAdminDashboardClick}
+                  className="w-full rounded-lg bg-[#F5A623] px-4 py-3 text-[13px] font-bold text-[#060911] transition hover:bg-[#E09018]"
+                >
+                  Admin Dashboard
+                </button>
+              ) : null}
               {!isLoggedIn ? (
                 <button
                   onClick={() => {

@@ -283,7 +283,13 @@ export default function OnboardingPage() {
   }, [businessName, selectedBusiness]);
 
   useEffect(() => {
-    router.prefetch("/dashboard");
+    const prefetchResult = router.prefetch("/dashboard");
+
+    if (prefetchResult && typeof prefetchResult.catch === "function") {
+      prefetchResult.catch(() => {
+        // Prefetch can be aborted during dev navigations; ignore that noise.
+      });
+    }
   }, [router]);
 
   useEffect(() => {
